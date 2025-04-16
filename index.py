@@ -58,7 +58,7 @@ async def handler(websocket):
     try:
         while True:
             vesc_data = Vesc()
-            await websocket.send(json.dumps({"event":"vesc_data_recieved", "data": vesc_data}))
+            await websocket.send(json.dumps({"event":TYPES["COMM_VESC_INFO"], "data": vesc_data}))
 
             try:
                 message = await asyncio.wait_for(websocket.recv(), timeout=1) 
