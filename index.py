@@ -7,11 +7,11 @@ import asyncio
 import websockets
 import json
 
-from vesc import Vesc, is_vesc_parked
-from utils import calculate_speed, calculate_throttle_percentage, park_bike,unpark_bike 
+from vesc import Vesc, is_vesc_parked, set_motor_current_limit,set_battery_cut
+from utils import calculate_speed, calculate_throttle_percentage, park_bike,unpark_bike  
 from config import MAX_VESC_CURRENT, PIVESC_VERSION, PROFILES
 from typedefs import TYPES
-connected_clients = set() 
+connected_clients = set()  
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -36,14 +36,24 @@ async def handle_message(websocket, message):
         command = data.get("command")
         _data = data.get("data") 
 
-        if command ==  TYPES["COMM_SET_PARKED"]:
+        if command ==  TYPES.COMM_SET_PARKED:
             print("Parking bike...")
             parked = park_bike()
             await websocket.send(json.dumps({"parked": parked}))
-        elif command == TYPES["COMM_SET_UNPARKED"]:
-            unparked = unpark_bike()
+        elif command == TYPES.COMM_SET_UNPARKED:
+            unparked = unpark_bike() 
             await websocket.send(json.dumps({"unparked": unparked}))
-        elif command == TYPES["COMM_GET_PARKED_STATUS"]:
+        elif command == TYPES.COMM_SET_MOTOR_LIMITS:
+            motor_current = float(_data.get("motorCurrent"))
+            battery_current = float(_data.get("batteryCurrent"))
+            field_weakening = float(_data.get("fieldWeakening"))
+            set_motor_current_limit(motor_current,battery_current,field_weakening)
+        elif command == TYPES.COMM_SET_BATTERY_CUT:
+            battery_cut_start = float(_data.get("battery_start"))
+            battery_cut_end = battery_cut_start
+            set_battery_cut(battery_cut_start, battery_cut_end) 
+            pass
+        elif command == TYPES.COMM_GET_PARKED_STATUS:
             await websocket.send(json.dumps({"parked": is_vesc_parked()}))
         else:
             await websocket.send(json.dumps({"error": "Unknown command"}))
@@ -58,7 +68,7 @@ async def handler(websocket):
     try:
         while True:
             vesc_data = Vesc()
-            await websocket.send(json.dumps({"event":TYPES["COMM_VESC_INFO"], "data": vesc_data}))
+            await websocket.send(json.dumps({"event":TYPES.COMM_VESC_INFO, "data": vesc_data}))
 
             try:
                 message = await asyncio.wait_for(websocket.recv(), timeout=1) 
