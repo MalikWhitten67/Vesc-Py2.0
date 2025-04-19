@@ -19,7 +19,21 @@ logger = logging.getLogger(__name__)
 
 # Flask App
 app = Flask(__name__, static_folder="UI/dist", static_url_path="/app")
-CORS(app)
+CORS(app) 
+ 
+@app.route('/motor_measurements', methods=['GET'])
+def motor_measurements():
+    try:
+        data = Vesc()
+        if not data:
+            return jsonify({"error": "No data available"}), 500
+        return jsonify(data)
+    except Exception as e:
+        logger.exception("Error in /motor_measurements endpoint: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+ 
+ 
 
 @app.route('/')
 def index():
@@ -36,24 +50,29 @@ async def handle_message(websocket, message):
         command = data.get("command")
         _data = data.get("data") 
 
-        if command ==  TYPES.COMM_SET_PARKED:
+        if command == "COMM_SET_PARKED":
             print("Parking bike...")
             parked = park_bike()
             await websocket.send(json.dumps({"parked": parked}))
-        elif command == TYPES.COMM_SET_UNPARKED:
+        elif command == "COMM_SET_UNPARKED":
             unparked = unpark_bike() 
             await websocket.send(json.dumps({"unparked": unparked}))
-        elif command == TYPES.COMM_SET_MOTOR_LIMITS:
+        elif command == "COMM_SET_MOTOR_CONF":
             motor_current = float(_data.get("motorCurrent"))
             battery_current = float(_data.get("batteryCurrent"))
             field_weakening = float(_data.get("fieldWeakening"))
-            set_motor_current_limit(motor_current,battery_current,field_weakening)
-        elif command == TYPES.COMM_SET_BATTERY_CUT:
+            v = set_motor_current_limit(motor_current,battery_current,field_weakening)
+            print(v)
+            if v:
+                await websocket.send(json.dumps({"event":"COMM_SET_MOTOR_CONF", "success": True}))
+            else:
+                await websocket.send(json.dumps({"event":"COMM_SET_MOTOR_CONF", "success": False}))
+        elif command == "COMM_SET_BATTERY_CUT":
             battery_cut_start = float(_data.get("battery_start"))
             battery_cut_end = battery_cut_start
             set_battery_cut(battery_cut_start, battery_cut_end) 
             pass
-        elif command == TYPES.COMM_GET_PARKED_STATUS:
+        elif command == "COMM_GET_PARKED_STATUS":
             await websocket.send(json.dumps({"parked": is_vesc_parked()}))
         else:
             await websocket.send(json.dumps({"error": "Unknown command"}))
@@ -67,8 +86,8 @@ async def handler(websocket):
     connected_clients.add(websocket)
     try:
         while True:
-            vesc_data = Vesc()
-            await websocket.send(json.dumps({"event":TYPES.COMM_VESC_INFO, "data": vesc_data}))
+            vesc_data = Vesc() 
+            await websocket.send(json.dumps({"event":"COMM_VESC_INFO", "data": vesc_data}))
 
             try:
                 message = await asyncio.wait_for(websocket.recv(), timeout=1) 
@@ -83,6 +102,8 @@ async def handler(websocket):
 
 # Threaded Flask runner
 def run_flask():
+    
+    print("Starting Flask server...")
     app.run(host='0.0.0.0', port=5000, debug=False)
 
 # Async main to run both servers

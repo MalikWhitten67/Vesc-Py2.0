@@ -64,8 +64,7 @@ def vesc_serial():
         print(f"Error opening serial port: {e}")
         return None 
 
-
-serial_con = vesc_serial()   
+  
 
 def build_packet(command_id):
     payload = bytes([command_id])
@@ -129,12 +128,14 @@ def parse_get_values(data):
     values['adc1'] = adc_values[0] 
     values['adc2'] = adc_values[1] 
     values['isParked'] = is_vesc_parked()
-    values['vesc_fw']  = get_vecs_fw_version(vesc_serial()) 
+    values['vesc_fw']  = get_vecs_fw_version() 
 
  
     return values
 
 def get_vesc_values():
+    
+    serial_con = vesc_serial()  
     serial_con.write(build_packet(COMM_GET_VALUES))
     payload = read_packet(serial_con)
 
@@ -143,10 +144,12 @@ def get_vesc_values():
     else:
             return None
 def get_adc_values():
+    
+    serial_con = vesc_serial()  
     serial_con.write(build_packet(COMM_GET_ADC_VALUES))
     payload = read_packet(serial_con)
     if payload and payload[0] == COMM_GET_ADC_VALUES:
-        return list(payload[1], payload[2])
+        return list([payload[1], payload[2]])
     else:
         return None
      
@@ -163,6 +166,8 @@ def Vesc():
         return None
      
 def set_duty_cycle(duty):
+    
+    serial_con = vesc_serial()  
     try:
         duty = max(0.0, min(duty, 1.0))
         payload = struct.pack('>Bf', COMM_SET_DUTY, duty)
@@ -179,6 +184,8 @@ def set_current( current):
 
 
 def get_vecs_fw_version():
+    
+    serial_con = vesc_serial()  
     payload = struct.pack('>B', COMM_FW_VERSION)
     packet = create_vesc_packet(payload)
     serial_con.write(packet)
@@ -192,16 +199,25 @@ def get_vecs_fw_version():
         return "unknown"
 
 def set_battery_cut(start, end):
+     
+     serial_con = vesc_serial()  
      try:
          payload = struct('>Bfff', COMM_SET_BATTERY_CUT, start,end)
          packet = create_vesc_packet(payload)
          serial_con.write(packet)
+         response = read_packet(serial_con)
+         if response and response[0] == COMM_SET_BATTERY_CUT:
+             print("Successfully set battery cutoff value")
+         else:
+             print("Failed to set battery cutoff")
          return True
      except Exception as e:
         print(f"Error occured {e}")
         return False
 
 def set_rpm( rpm):
+    
+    serial_con = vesc_serial()  
     payload = struct.pack('>Bf', COMM_SET_RPM, rpm)
     packet = create_vesc_packet(payload)
     serial_con.write(packet)
@@ -220,6 +236,8 @@ def set_max_current_limit(serial_con, limit):
  
 
 def is_vesc_parked():
+    
+    serial_con = vesc_serial()  
     try:
         serial_con.write(build_packet(COMM_GET_PARKED_STATUS))
 
@@ -242,16 +260,42 @@ def is_vesc_parked():
         return None
     
 def set_motor_current_limit(motor_current, battery_current, fieldweakening): 
-     try:
-         payload = struct.pack('>Bfff', COMM_SET_MOTOR_LIMITS, motor_current, battery_current, fieldweakening)
-         packet = build_packet(payload)
-         serial_con.write(packet)
-         response  =  read_packet(serial)
-         if response and response[0] == COMM_SET_MOTOR_LIMITS:
-            l_current_max = response[1]
-            l_in_current_max = response[2]
-            foc_fw_current_max = response[3]
-            print(f"Vesc Successfully set values Motor_A {l_current_max} Battery_A {l_in_current_max} FieldWeakening_A {foc_fw_current_max}")
-     except Exception as e:
+    print(motor_current, battery_current, fieldweakening)
+    try:
+        payload = struct.pack('>Bffff',
+    COMM_SET_MOTOR_LIMITS,
+    motor_current,
+    battery_current,
+    fieldweakening,
+    0.0
+)
+
+        packet = create_vesc_packet(payload)
+
+        serial_con = vesc_serial()
+        serial_con.write(packet)
+        response = read_packet(serial_con)
+
+        print(f"Got response: {response} ({type(response)})")
+
+        if not response or len(response) < 13:
+            print("Invalid or too short response")
+            return False
+
+        if isinstance(response[0], bytes):
+            # This is wrong — each byte should be int (0-255), not b'\x01'
+            print("Response appears to be list of byte-objects, not raw bytes")
+            return False
+
+        if response[0] != COMM_SET_MOTOR_LIMITS:
+            print(f"Unexpected command in response: {response[0]}")
+            return False
+
+        # Now unpack floats — skip the command byte
+        l_current_max, l_in_current_max, foc_fw_current_max = struct.unpack('>fff', response[1:13])
+
+        print(f"Vesc Successfully set values Motor_A {l_current_max} Battery_A {l_in_current_max} FieldWeakening_A {foc_fw_current_max}")
+        return True
+    except Exception as e:
         print(f"Error setting motor current: {e}")
-   
+        return False
