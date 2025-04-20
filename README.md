@@ -1,2 +1,2 @@
 # Vesc-Py2.0
-A library for communicating with vesc
+Vesc py aims to be a dropin ease of peace library for developing applications and products around vesc, it does all of the heavylifting and even allows endpoint connection through websocket.
